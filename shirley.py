@@ -1,11 +1,22 @@
 #!/usr/bin/python2
 # coding: utf-8
 
+from twx.botapi import TelegramBot, ReplyKeyboardMarkup
 from subprocess import Popen, PIPE, STDOUT
 from functools import partial
-import re, datetime, random, time
+import re, datetime, random, time, codecs, pickle
 from glob import glob
 from markov import say, process
+
+"""
+Configurando o bot
+"""
+
+BOTAPI='247937795:AAHTtuvKV2a2pQF93wgDdVhWsK5IiNlCiAY'
+bot = TelegramBot(BOTAPI)
+bot.update_bot_info().wait()
+
+
 ansi_escape = re.compile(r'\x1b[^m]+m')
 
 molejo = """Acorda criancada ta na hora da gente brincar (oba)
@@ -72,9 +83,6 @@ Beijinho no ombro pro recalque passar longe!"""
 process(funk)
 process(molejo)
 
-p = Popen(['telegram', '-N'], stdin=PIPE, stdout=PIPE, stderr=STDOUT)
-
-p.stdout.read(255) # read first bytes...
 print "started"
 
 line = ""
@@ -96,9 +104,10 @@ p e r d i  :-X """
 def chance(perc):
     return random.randint(0, 99) > (100 - perc)
 
-def wrt(m):
-    p.stdin.write("msg " + title.replace(" ", "_") + " " + m + "\n")
-
+def wrt(user,message):
+    bot.send_message(user, message).wait()
+    print 'Shirley: ' + message
+    
 def voice(m):
     pp = Popen(["espeak", "-vpt+f2", "'%s'" % m.replace("'", "'"), "-w", "/tmp/x.wav"], stdout=PIPE)
     pp.wait()
@@ -127,91 +136,65 @@ def glitch():
     fw.close()
     return "/tmp/teleglitched.jpg"
 
-reading_msg = False
-waiting_photo_download = False
-while True:
-    if line:
-        print line.strip()
-        if ansi_escape.sub("", line)[0].startswith("[") or line.startswith(">"):
-            reading_msg = False
-    if "changed title" in line:
-        reading_msg = False
-        title = line.split("changed title to ")[-1].strip()
-        title = ansi_escape.sub("", title)
-        if "shirleyyy" not in title:
-            p.stdin.write("rename_chat %s shirleyyy!!!!\n" % title.replace(" ", "_"))
-            print "changing title"
+answered = pickle.load(open('answered.pkl','r'))
 
-    elif line.startswith("Chat "):
-        reading_msg = False
-        title = ":".join(line.split("Chat ")[1].split(":")[:-1])
-        title = ansi_escape.sub("", title)
-        wrt(random.choice(["chegay .... :D", "oie", "voltay gent!!!", "aloooou!!1", "hein??"]))
-        #img("disco.png")
-    elif waiting_photo_download and "*** Done" in line:
-        fname = ansi_escape.sub("", line).split("Done: ")[-1].strip()
-        i = Image.open(fname)
-        i.save("/tmp/teleglitch.jpg")
-        newf = glitch()
-        img(newf)
-    elif title in line and ">>>" in line or reading_msg:
-        reading_msg = True
-        msg = line.split(">>> ")[-1]
-        msg_id = "not"
-        try:
-            i = 0
-            while 'unread' in msg_id or not msg_id.isdigit():
-                msg_id = ansi_escape.sub("", line).strip().split()[i]
-                i+=1
-        except Exception, e:
-            print e
-            msg_id = 0
-        if title in line:
-            user = ansi_escape.sub("", line.split(">>> ")[0].split(title)[-1].strip())
+updates = bot.get_updates().wait() #Flush first updates
+for pos, update in enumerate(updates):
+    answered.append(update.message.message_id)
+
+while True:
+    print ("Getting updates".center(50, '-'))
+    updates = bot.get_updates().wait()
+    for pos, update in enumerate(updates):
+        #print str(update)
+        msg = update.message.text
+        if update.message.chat:
+        	user = update.message.chat.id
         else:
-            user = 'noone'
-        if "shirley" in user.lower():
-            pass
+        	user = update.message.sender.id
+
+        if update.message.message_id in answered:
+            continue
+
+        answered.append(update.message.message_id)
+        
+        
+        if msg.lower().startswith("qotd"):
+            wrt(user, "%s" % (Popen(["fortune"], stdout=PIPE).stdout.read().replace("\n", " ")))
+        elif "molej" in msg.lower():
+            wrt(user, "%s" % random.choice(molejo.split("\n")))
+        elif "funk" in msg.lower():
+            wrt(user, "%s" % random.choice(funk.split("\n")))
+        elif re.match(".*( |^)(falo|piroca)(s| |\x1b|$).*", msg.lower()):
+            wrt(user, "8%sD" % ("="*random.randint(1,100)))
+        #elif "xxt" in msg.lower() or "xoxota" in msg.lower():
+        #    img(random.choice(glob("pussy*.jpg")))
+        elif msg.lower().startswith("dia ") or msg.lower().startswith("dia!") or msg.lower().startswith("dya") or "bom dia" in msg.lower() or "bom dya" in msg.lower() or "dia!" in msg.lower():
+            wrt(user, "%s" % (random.choice(bomdia.split("\n"))))
+        elif "perd" in msg.lower():
+            wrt(user, random.choice(perdi.split("\n")))
+        #elif "[photo]" in msg and 'shirley porter' not in line.lower():
+        #    p.stdin.write("load_photo %s\n" % msg_id)
+        #    waiting_photo_download = True
         else:
-            if msg.lower().startswith("qotd"):
-                wrt("%s" % (Popen(["fortune"], stdout=PIPE).stdout.read().replace("\n", " ")))
-            elif "molej" in msg.lower():
-                wrt("%s" % random.choice(molejo.split("\n")))
-            elif "funk" in msg.lower():
-                wrt("%s" % random.choice(funk.split("\n")))
-            elif re.match(".*( |^)(falo|piroca)(s| |\x1b|$).*", msg.lower()):
-                wrt("8%sD" % ("="*random.randint(1,100)))
-            elif "xxt" in msg.lower() or "xoxota" in msg.lower():
-                img(random.choice(glob("pussy*.jpg")))
-            elif msg.lower().startswith("dia ") or msg.lower().startswith("dia!") or msg.lower().startswith("dya") or "bom dia" in msg.lower() or "bom dya" in msg.lower() or "dia!" in msg.lower():
-                wrt("%s" % (random.choice(bomdia.split("\n"))))
-            elif "perd" in msg.lower():
-                wrt(random.choice(perdi.split("\n")))
-            elif "[photo]" in msg and 'shirley porter' not in line.lower():
-                p.stdin.write("load_photo %s\n" % msg_id)
-                waiting_photo_download = True
-            else:
-                ss = say(msg.lower())
-                if ss.strip()[:-2] in msg.lower().strip().replace(",", ""):
-                    print "SAME:", ss
-                    pass #img(random.choice(glob("*.jpg") + glob("*.png")))
-                else:
-                    f = open("porter.txt", 'a')
-                    f.write("FALA: " + msg)
-                    f.write("RESPOSTA: " + ss + "\n\n")
-                    f.close()
-                    time.sleep(.1)
-                    if chance(5):
-                        voice(ss)
-                    else:
-                        wrt(ss)
-            mm = msg.lower().strip().replace("\x1b[0m", "")
-            process(mm)
-            f = open("input.txt", 'a')
-            f.writelines([mm + "\n"])
-            f.close()
-    time.sleep(0.5)
-    line_old = line
-    line = p.stdout.readline()
-    if line == line_old:
-        line = ""
+            ss = say(msg.lower())
+            if len(ss.split()) > 2:
+                wrt(user, ss)
+        #    if ss.strip()[:-2] in msg.lower().strip().replace(",", ""):
+        #        print "SAME:", ss
+        #        pass #img(random.choice(glob("*.jpg") + glob("*.png")))
+        #    else:
+        #        f = open("porter.txt", 'a')
+        #        f.write("FALA: " + msg)
+        #        f.write("RESPOSTA: " + ss + "\n\n")
+        #        f.close()
+        #        time.sleep(.1)
+        #        if chance(5):
+        #            voice(ss)
+        #        else:
+        #            wrt(ss
+        process(msg)
+        f = codecs.open("input.txt", 'a', encoding='utf-8')
+        f.write(msg+'\n')
+        f.close()
+        pickle.dump(answered, file=open('answered.pkl','w'))
